@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# saved html scraped copies (dev-only artifacts, not needed at runtime)
+*.html
+*_files/
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
