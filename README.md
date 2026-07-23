@@ -73,6 +73,7 @@ onepace --version
 
 - `<` / `>` - previous / next episode in the playlist
 - `Space` - pause · `f` - fullscreen · `q` - quit
+- `Shift`+`q` - quit **and save your progress**: mpv writes the playback position keyed by the stream URL. Since onepace produces the same URLs every run, relaunching the arc resumes right where you left off.
 
 ## Disclaimer
 
