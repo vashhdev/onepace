@@ -31,9 +31,18 @@ python onepace.py
 Or install it as a global `onepace` command with [pipx](https://pipx.pypa.io):
 
 ```bash
-pipx install .
+pipx install git+https://github.com/vashhdev/onepace
 onepace
 ```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install git+https://github.com/vashhdev/onepace
+onepace
+```
+
+(From a local clone, use `pipx install .` / `uv tool install .`.)
 
 ## Usage
 
