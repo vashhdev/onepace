@@ -257,7 +257,20 @@ def parse_watch(html):
 
 def resolve_list(list_id):
     data = json.loads(fetch(LIST_API.format(list_id)))
-    return [f["id"] for f in data.get("files", [])], data.get("title", list_id)
+    files = data.get("files", [])
+    ids = [f["id"] for f in files]
+    names = [f.get("name", f["id"]) for f in files]
+    return ids, names, data.get("title", list_id)
+
+
+def write_m3u(path, urls, names, title):
+    """write a standard EXTM3U playlist (openable by mpv-android, mpvKt, VLC...)."""
+    lines = ["#EXTM3U", f"#PLAYLIST:{title}"]
+    for url, name in zip(urls, names):
+        lines.append(f"#EXTINF:-1,{name}")
+        lines.append(url)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
 
 
 MPV_INSTALL = {
@@ -320,6 +333,9 @@ def main():
     ap.add_argument("--list", action="store_true", help="list all arcs and exit")
     ap.add_argument("--print", dest="print_only", action="store_true",
                     help="print file urls instead of launching mpv")
+    ap.add_argument("--m3u", nargs="?", const="", metavar="PATH",
+                    help="write an .m3u playlist instead of launching mpv "
+                         "(great for mobile / mpv-android). default filename if PATH omitted")
     ap.add_argument("--mpv", default="mpv", help="path to mpv binary")
     ap.add_argument("--version", action="version", version=f"onepace {__version__}")
     args = ap.parse_args()
@@ -366,7 +382,7 @@ def main():
         have = ", ".join(arcs[slug][track]) or "none"
         sys.exit(f"{slug} has no {track} {quality}. available {track}: {have}")
 
-    file_ids, title = resolve_list(list_id)
+    file_ids, names, title = resolve_list(list_id)
     urls = [FILE_URL.format(fid) for fid in file_ids]
     if not urls:
         sys.exit("list resolved to 0 files")
@@ -374,6 +390,11 @@ def main():
     sys.stderr.write(f"{title}  ({track} {quality}, {len(urls)} files)\n")
     if args.print_only:
         print("\n".join(urls))
+        return
+    if args.m3u is not None:
+        path = args.m3u or f"{slug}-{track}-{quality}.m3u"
+        write_m3u(path, urls, names, title)
+        print(os.path.abspath(path))
         return
     mpv = ensure_mpv(args.mpv)
     subprocess.run([mpv, f"--force-media-title={title}", *urls])

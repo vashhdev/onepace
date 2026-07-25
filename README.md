@@ -67,6 +67,7 @@ onepace --version
 | `--dub`              | English dub instead of sub                         |
 | `--list`             | list all arcs and exit                             |
 | `--print`            | print stream URLs, don't launch mpv                |
+| `--m3u [PATH]`       | write an `.m3u` playlist instead of launching mpv (handy for mobile). PATH optional |
 | `--mpv PATH`         | path to the mpv binary (default `mpv`)             |
 
 ### mpv playback tips
@@ -74,6 +75,30 @@ onepace --version
 - `<` / `>` - previous / next episode in the playlist
 - `Space` - pause · `f` - fullscreen · `q` - quit
 - `Shift`+`q` - quit **and save your progress**: mpv writes the playback position keyed by the stream URL. Since onepace produces the same URLs every run, relaunching the arc resumes right where you left off.
+
+## Mobile (Android / mpv-android / mpvKt)
+
+The `--m3u` flag writes a standard playlist that any mpv-based mobile player (mpv-android, mpvKt) or VLC can open - the whole arc plays in order, still streaming, no downloads. Two ways to get one on your phone:
+
+**Easiest - generate on desktop, send to phone:**
+
+```bash
+onepace "long ring long land" --m3u
+# writes long-ring-long-land-sub-1080p.m3u
+```
+
+Send that `.m3u` to your phone (share sheet, Syncthing, Telegram to yourself, whatever) and open it with mpv-android. Done.
+
+**On-device with [Termux](https://termux.dev):**
+
+```bash
+pkg install python
+python onepace.py "long ring long land" --m3u ~/storage/shared/onepace.m3u
+```
+
+Then open `onepace.m3u` from your file manager with mpv-android. (Run `termux-setup-storage` once so `~/storage/shared` maps to your phone's storage.)
+
+> Note: the arc picker's live filtering needs a real terminal, so on a touch keyboard the flag form (`onepace "arc name"`) is the smoother ride. `--list` shows every arc slug.
 
 ## Disclaimer
 
