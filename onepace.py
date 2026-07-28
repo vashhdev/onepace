@@ -14,6 +14,13 @@ Usage:
   python onepace.py long-ring-long-land --dub
   python onepace.py --list                                # print all arcs then exit
   python onepace.py "wano" --print                        # print urls, don't launch mpv
+  python onepace.py "thriller bark" --dub                 # no official dub -> Muhn Pace dub
+
+Dub sources:
+  One Pace has not dubbed every arc. Where an official dub exists it always wins;
+  on the arcs it is missing (Post-Enies Lobby through Whole Cake Island) --dub
+  falls back to Muhn Pace, a separate solo dub edit built on One Pace episodes.
+  It is always labelled, never substituted silently. --muhn forces it anyway.
 
 Interactive controls:
   arc picker : type letters to narrow the list, up/down arrows to move, Enter to select, Esc to cancel
@@ -24,6 +31,7 @@ import argparse
 import json
 import os
 import re
+from html import unescape as html_unescape
 import shutil
 import subprocess
 import sys
@@ -35,6 +43,38 @@ WATCH_URL = "https://onepace.net/en/watch"
 LIST_API = "https://pixeldrain.net/api/list/{}"
 FILE_URL = "https://pixeldrain.net/api/file/{}"
 UA = {"User-Agent": "Mozilla/5.0 (onepace.py)"}
+
+# --- Muhn Pace: a solo dub edit by Muhny D Goat that fills the arcs One Pace has
+# not dubbed. Built on One Pace episodes, so it matches their style closely, but
+# it is a separate project - always label it as such, never substitute silently.
+# Keyed by One Pace arc slug. Tuples are split releases, played back to back.
+# Refresh with --refresh-muhn (see MUHN_GUIDE).
+MUHN_GUIDE = "https://steamcommunity.com/sharedfiles/filedetails/?id=3685024934"
+MUHN_PACE = {
+    "enies-lobby":         ("6VyLVkB2",),
+    "post-enies-lobby":    ("jVhFqouN",),
+    "thriller-bark":       ("NwJKTg21",),
+    "sabaody-archipelago": ("KztkSCuY",),
+    "amazon-lily":         ("TuZJgwRL",),
+    "impel-down":          ("4AN9Xxht",),
+    "marineford":          ("oa8oZvZx",),
+    "post-war":            ("MH7AQkgr",),
+    "fishman-island":      ("ZQhstabS",),
+    "punk-hazard":         ("A1jFtPvQ",),
+    "dressrosa":           ("f8HTXmAk",),
+    "zou":                 ("totP9Xmm",),
+    "whole-cake-island":   ("AyvkmFFZ",),
+    "wano":                ("QZw3Ejpy", "sF9stHJo"),   # Acts 1 & 2, then Act 3
+}
+MUHN_TITLES = {
+    "enies-lobby": "Enies Lobby", "post-enies-lobby": "Post-Enies Lobby",
+    "thriller-bark": "Thriller Bark", "sabaody-archipelago": "Sabaody Archipelago",
+    "amazon-lily": "Amazon Lily", "impel-down": "Impel Down",
+    "marineford": "Marineford", "post-war": "Post-War",
+    "fishman-island": "Fishman Island", "punk-hazard": "Punk Hazard",
+    "dressrosa": "Dressrosa", "zou": "Zou",
+    "whole-cake-island": "Whole Cake Island", "wano": "Wano",
+}
 
 # ------------------------------------------------------------------ interactive
 # single-key input: msvcrt on Windows, termios/tty on POSIX.
@@ -256,11 +296,27 @@ def parse_watch(html):
 
 
 def resolve_list(list_id):
+    """resolve a pixeldrain list id -> (file ids, names, title), videos only.
+
+    some lists carry non-video extras (readme .txt notes, comparison clips), so
+    filter on the mime type the API reports rather than trusting the extension.
+    """
     data = json.loads(fetch(LIST_API.format(list_id)))
-    files = data.get("files", [])
+    files = [f for f in data.get("files", [])
+             if str(f.get("mime_type", "")).startswith("video/")]
     ids = [f["id"] for f in files]
     names = [f.get("name", f["id"]) for f in files]
     return ids, names, data.get("title", list_id)
+
+
+def resolve_muhn(slug):
+    """resolve a Muhn Pace arc -> (file ids, names, title), merging split lists."""
+    ids, names = [], []
+    for list_id in MUHN_PACE[slug]:
+        i, n, _ = resolve_list(list_id)
+        ids += i
+        names += n
+    return ids, names, f"{MUHN_TITLES.get(slug, slug)} [Muhn Pace dub]"
 
 
 def write_m3u(path, urls, names, title):
@@ -271,6 +327,49 @@ def write_m3u(path, urls, names, title):
         lines.append(url)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
+
+
+MUHN_ALIASES = {
+    "post-marineford": "post-war",
+    "wano-acts-1-2": "wano", "wano-act-3": "wano",
+}
+# lists in the guide that are not arc episode runs. kuoQYqfR is the "Group Shot
+# Project" - V1/V2 comparison clips plus sub and dub variants of a single episode.
+MUHN_SKIP_IDS = {"kuoQYqfR"}
+
+
+def refresh_muhn():
+    """re-scrape the Muhn Pace guide and print a paste-ready MUHN_PACE table.
+
+    prints rather than rewriting this file, so the diff stays reviewable - list
+    ids change rarely, and a bad scrape should never silently break playback.
+    """
+    html = fetch(MUHN_GUIDE)
+    found = {}
+    for m in re.finditer(r'<a[^>]*pixeldrain[^>]*>(.*?)</a>', html, re.S):
+        list_id = re.search(r'l(?:%2F|/)([A-Za-z0-9]+)', m.group(0))
+        label = re.sub(r"<[^>]+>", "", m.group(1))
+        label = re.sub(r"[^\w\s&-]", "", html_unescape(label)).strip()
+        if not list_id or not label:
+            continue
+        slug = slugify(label.replace("&", "-"))
+        slug = MUHN_ALIASES.get(slug, slug)
+        if slug in ("download", "stream") or list_id.group(1) in MUHN_SKIP_IDS:
+            continue            # bulk-download links and non-episode extras
+        found.setdefault(slug, [])
+        if list_id.group(1) not in found[slug]:
+            found[slug].append(list_id.group(1))
+
+    print(f"# scraped from {MUHN_GUIDE}")
+    print("MUHN_PACE = {")
+    for slug, ids in found.items():
+        mark = "" if MUHN_PACE.get(slug, ()) == tuple(ids) else "   # CHANGED"
+        inner = ", ".join(f'"{i}"' for i in ids)
+        print(f'    "{slug}":{" " * max(1, 22 - len(slug))}({inner},),{mark}')
+    print("}")
+    gone = sorted(set(MUHN_PACE) - set(found))
+    if gone:
+        print(f"# no longer in the guide: {', '.join(gone)}")
 
 
 MPV_INSTALL = {
@@ -329,7 +428,13 @@ def main():
     ap = argparse.ArgumentParser(description="stream a One Pace arc in mpv")
     ap.add_argument("arc", nargs="?", help="arc name or slug, e.g. 'long ring long land'")
     ap.add_argument("-q", "--quality", default="1080p", choices=["480p", "720p", "1080p"])
-    ap.add_argument("--dub", action="store_true", help="English dub instead of sub")
+    ap.add_argument("--dub", action="store_true", help="English dub instead of sub. "
+                    "falls back to the Muhn Pace dub on arcs One Pace has not dubbed")
+    ap.add_argument("--muhn", action="store_true", help="force the Muhn Pace dub even "
+                    "where an official One Pace dub exists")
+    ap.add_argument("--refresh-muhn", dest="refresh_muhn", action="store_true",
+                    help="re-scrape the Muhn Pace watch guide and print an updated "
+                         "MUHN_PACE table (does not edit this file)")
     ap.add_argument("--list", action="store_true", help="list all arcs and exit")
     ap.add_argument("--print", dest="print_only", action="store_true",
                     help="print file urls instead of launching mpv")
@@ -341,19 +446,31 @@ def main():
     args = ap.parse_args()
 
     _enable_vt()
+    if args.refresh_muhn:
+        refresh_muhn()
+        return
+
     sys.stderr.write("fetching arc list...\n")
     arcs = parse_watch(fetch(WATCH_URL))
 
     if args.list:
         for slug in arcs:
             q = sorted(set(arcs[slug]["sub"]) | set(arcs[slug]["dub"]))
-            print(f"{slug:28} {arcs[slug]['title']:30} [{','.join(q)}]")
+            dub = "dub" if arcs[slug]["dub"] else ("dub:muhn" if slug in MUHN_PACE else "sub-only")
+            print(f"{slug:28} {arcs[slug]['title']:30} [{','.join(q)}] {dub}")
         return
 
     if args.arc:
         # non-interactive path: flags decide everything
         slug = match_arc(arcs, args.arc)
-        track = "dub" if args.dub else "sub"
+        if args.muhn:
+            track = "muhn"
+        elif args.dub and not arcs[slug]["dub"] and slug in MUHN_PACE:
+            track = "muhn"          # no official dub here, fall back to Muhn Pace
+            sys.stderr.write(f"no official One Pace dub for {slug}, "
+                             "using the Muhn Pace dub instead\n")
+        else:
+            track = "dub" if args.dub else "sub"
         quality = args.quality
     else:
         # interactive path: pick arc, then track, then quality
@@ -364,35 +481,48 @@ def main():
         slug = chosen
         print(f"\n{arcs[slug]['title']}")
 
-        tracks = [t for t in ("sub", "dub") if arcs[slug][t]]
-        if len(tracks) == 1:
-            track = tracks[0]
+        # official dub wins where it exists; Muhn Pace only fills the gaps
+        opts = [("English Sub", "sub")]
+        if arcs[slug]["dub"]:
+            opts.append(("English Dub", "dub"))
+        elif slug in MUHN_PACE:
+            opts.append(("English Dub (Muhn Pace - unofficial dub edit)", "muhn"))
+        track = opts[menu_pick(opts, 0, "\ntrack:")][1] if len(opts) > 1 else opts[0][1]
+
+        if track == "muhn":
+            quality = None          # Muhn Pace ships a single quality per arc
         else:
-            ti = menu_pick([("English Sub", "sub"), ("English Dub", "dub")],
-                           0, "\ntrack:")
-            track = ["sub", "dub"][ti]
+            avail = [q for q in ("1080p", "720p", "480p") if q in arcs[slug][track]]
+            default_q = avail.index("1080p") if "1080p" in avail else 0
+            qi = menu_pick([(q, q) for q in avail], default_q, "\nquality:")
+            quality = avail[qi]
 
-        avail = [q for q in ("1080p", "720p", "480p") if q in arcs[slug][track]]
-        default_q = avail.index("1080p") if "1080p" in avail else 0
-        qi = menu_pick([(q, q) for q in avail], default_q, "\nquality:")
-        quality = avail[qi]
+    if track == "muhn":
+        if slug not in MUHN_PACE:
+            sys.exit(f"Muhn Pace has no release for {slug}. "
+                     f"covered arcs: {', '.join(sorted(MUHN_PACE))}")
+        file_ids, names, title = resolve_muhn(slug)
+        label = "Muhn Pace dub"
+    else:
+        list_id = arcs[slug][track].get(quality)
+        if not list_id:
+            have = ", ".join(arcs[slug][track]) or "none"
+            hint = ("  (try --dub to use the Muhn Pace dub)"
+                    if track == "dub" and slug in MUHN_PACE else "")
+            sys.exit(f"{slug} has no {track} {quality}. available {track}: {have}{hint}")
+        file_ids, names, title = resolve_list(list_id)
+        label = f"{track} {quality}"
 
-    list_id = arcs[slug][track].get(quality)
-    if not list_id:
-        have = ", ".join(arcs[slug][track]) or "none"
-        sys.exit(f"{slug} has no {track} {quality}. available {track}: {have}")
-
-    file_ids, names, title = resolve_list(list_id)
     urls = [FILE_URL.format(fid) for fid in file_ids]
     if not urls:
         sys.exit("list resolved to 0 files")
 
-    sys.stderr.write(f"{title}  ({track} {quality}, {len(urls)} files)\n")
+    sys.stderr.write(f"{title}  ({label}, {len(urls)} files)\n")
     if args.print_only:
         print("\n".join(urls))
         return
     if args.m3u is not None:
-        path = args.m3u or f"{slug}-{track}-{quality}.m3u"
+        path = args.m3u or f"{slug}-{label.replace(' ', '-')}.m3u"
         write_m3u(path, urls, names, title)
         print(os.path.abspath(path))
         return

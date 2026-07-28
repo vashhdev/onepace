@@ -73,7 +73,9 @@ onepace --version
 | Flag                 | Description                                        |
 | -------------------- | -------------------------------------------------- |
 | `-q`, `--quality`    | `480p`, `720p`, or `1080p` (default `1080p`)       |
-| `--dub`              | English dub instead of sub                         |
+| `--dub`              | English dub instead of sub (falls back to Muhn Pace where One Pace has no dub) |
+| `--muhn`             | force the Muhn Pace dub even where an official dub exists |
+| `--refresh-muhn`     | re-scrape the Muhn Pace guide, print an updated table |
 | `--list`             | list all arcs and exit                             |
 | `--print`            | print stream URLs, don't launch mpv                |
 | `--m3u [PATH]`       | write an `.m3u` playlist instead of launching mpv (handy for mobile). PATH optional |
@@ -84,6 +86,23 @@ onepace --version
 - `<` / `>` - previous / next episode in the playlist
 - `Space` - pause · `f` - fullscreen · `q` - quit
 - `Shift`+`q` - quit **and save your progress**: mpv writes the playback position keyed by the stream URL. Since onepace produces the same URLs every run, relaunching the arc resumes right where you left off.
+
+## English dub coverage
+
+One Pace hasn't dubbed every arc - 12 of them are sub-only, and the gap starts right after Enies Lobby. To cover it, onepace falls back to [**Muhn Pace**](https://steamcommunity.com/sharedfiles/filedetails/?id=3685024934), a separate solo dub edit by *Muhny D Goat* built on top of One Pace episodes, so it matches their style closely.
+
+The rule is simple: **an official One Pace dub always wins.** Muhn Pace is only offered on arcs One Pace hasn't dubbed, and it's always labelled as such - never substituted silently, since it's a different project with its own episode numbering.
+
+```bash
+onepace "alabasta" --dub          # official One Pace dub
+onepace "thriller bark" --dub     # no official dub -> Muhn Pace, and it says so
+onepace "wano" --muhn             # force Muhn Pace even though an official dub exists
+onepace --list                    # dub / dub:muhn / sub-only per arc
+```
+
+Arcs Muhn Pace covers: Enies Lobby, Post-Enies Lobby, Thriller Bark, Sabaody Archipelago, Amazon Lily, Impel Down, Marineford, Post-War, Fishman Island, Punk Hazard, Dressrosa, Zou, Whole Cake Island, Wano.
+
+Its pixeldrain list ids are pinned in `MUHN_PACE` inside `onepace.py` (there's no live index page to scrape). If Muhny releases or reuploads an arc, `--refresh-muhn` re-reads the watch guide and prints an updated table to paste in.
 
 ## Mobile (Android / mpv-android / mpvKt)
 
