@@ -37,7 +37,7 @@ import subprocess
 import sys
 import urllib.request
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 WATCH_URL = "https://onepace.net/en/watch"
 LIST_API = "https://pixeldrain.net/api/list/{}"
@@ -338,6 +338,11 @@ MUHN_ALIASES = {
 MUHN_SKIP_IDS = {"kuoQYqfR"}
 
 
+def muhn_available(slug, args):
+    """true if the Muhn Pace dub covers this arc and the user has not opted out."""
+    return slug in MUHN_PACE and not args.no_muhn
+
+
 def refresh_muhn():
     """re-scrape the Muhn Pace guide and print a paste-ready MUHN_PACE table.
 
@@ -430,8 +435,11 @@ def main():
     ap.add_argument("-q", "--quality", default="1080p", choices=["480p", "720p", "1080p"])
     ap.add_argument("--dub", action="store_true", help="English dub instead of sub. "
                     "falls back to the Muhn Pace dub on arcs One Pace has not dubbed")
-    ap.add_argument("--muhn", action="store_true", help="force the Muhn Pace dub even "
-                    "where an official One Pace dub exists")
+    muhn = ap.add_mutually_exclusive_group()
+    muhn.add_argument("--muhn", action="store_true", help="force the Muhn Pace dub even "
+                      "where an official One Pace dub exists")
+    muhn.add_argument("--no-muhn", dest="no_muhn", action="store_true",
+                      help="One Pace only: never fall back to the Muhn Pace dub")
     ap.add_argument("--refresh-muhn", dest="refresh_muhn", action="store_true",
                     help="re-scrape the Muhn Pace watch guide and print an updated "
                          "MUHN_PACE table (does not edit this file)")
@@ -456,7 +464,8 @@ def main():
     if args.list:
         for slug in arcs:
             q = sorted(set(arcs[slug]["sub"]) | set(arcs[slug]["dub"]))
-            dub = "dub" if arcs[slug]["dub"] else ("dub:muhn" if slug in MUHN_PACE else "sub-only")
+            dub = "dub" if arcs[slug]["dub"] else (
+                "dub:muhn" if muhn_available(slug, args) else "sub-only")
             print(f"{slug:28} {arcs[slug]['title']:30} [{','.join(q)}] {dub}")
         return
 
@@ -465,7 +474,7 @@ def main():
         slug = match_arc(arcs, args.arc)
         if args.muhn:
             track = "muhn"
-        elif args.dub and not arcs[slug]["dub"] and slug in MUHN_PACE:
+        elif args.dub and not arcs[slug]["dub"] and muhn_available(slug, args):
             track = "muhn"          # no official dub here, fall back to Muhn Pace
             sys.stderr.write(f"no official One Pace dub for {slug}, "
                              "using the Muhn Pace dub instead\n")
@@ -485,7 +494,7 @@ def main():
         opts = [("English Sub", "sub")]
         if arcs[slug]["dub"]:
             opts.append(("English Dub", "dub"))
-        elif slug in MUHN_PACE:
+        elif muhn_available(slug, args):
             opts.append(("English Dub (Muhn Pace - unofficial dub edit)", "muhn"))
         track = opts[menu_pick(opts, 0, "\ntrack:")][1] if len(opts) > 1 else opts[0][1]
 
@@ -508,7 +517,7 @@ def main():
         if not list_id:
             have = ", ".join(arcs[slug][track]) or "none"
             hint = ("  (try --dub to use the Muhn Pace dub)"
-                    if track == "dub" and slug in MUHN_PACE else "")
+                    if track == "dub" and muhn_available(slug, args) else "")
             sys.exit(f"{slug} has no {track} {quality}. available {track}: {have}{hint}")
         file_ids, names, title = resolve_list(list_id)
         label = f"{track} {quality}"

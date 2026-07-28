@@ -75,6 +75,7 @@ onepace --version
 | `-q`, `--quality`    | `480p`, `720p`, or `1080p` (default `1080p`)       |
 | `--dub`              | English dub instead of sub (falls back to Muhn Pace where One Pace has no dub) |
 | `--muhn`             | force the Muhn Pace dub even where an official dub exists |
+| `--no-muhn`          | One Pace only: never fall back to the Muhn Pace dub |
 | `--refresh-muhn`     | re-scrape the Muhn Pace guide, print an updated table |
 | `--list`             | list all arcs and exit                             |
 | `--print`            | print stream URLs, don't launch mpv                |
@@ -97,6 +98,7 @@ The rule is simple: **an official One Pace dub always wins.** Muhn Pace is only 
 onepace "alabasta" --dub          # official One Pace dub
 onepace "thriller bark" --dub     # no official dub -> Muhn Pace, and it says so
 onepace "wano" --muhn             # force Muhn Pace even though an official dub exists
+onepace "thriller bark" --dub --no-muhn   # One Pace only, no fallback
 onepace --list                    # dub / dub:muhn / sub-only per arc
 ```
 
