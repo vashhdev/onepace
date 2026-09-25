@@ -259,34 +259,41 @@ def slugify(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
 
 
-# --- parse the watch page into  arcs[slug] = {"title", "sub"/"dub": {quality: listid}} ---
+# --- parse the watch page into  arcs[slug] = {"title", "sub"/"dub"/"cc": {quality: listid}} ---
+# arcs are <h2><a href="#slug">, episodes are <h3><a href="#slug-01">. each episode
+# also carries its own per-file (/u/) links; only the arc-level lists (/l/) are
+# used, so episode sections are skipped. svg icons are <use href="#watch-icon-*">,
+# which is why arc anchors are matched on the heading tag, not any #fragment.
+TRACKS = {
+    "English Subtitles": "sub",
+    "English Dub": "dub",
+    "English Dub with Closed Captions": "cc",
+}
 TOKEN_RE = re.compile(
-    r'href="[^"]*#(?P<arc>[a-z0-9-]+)"'
-    r'|(?P<sub>English Subtitles)'
-    r'|(?P<dub>English Dub)'
+    r'<h2[^>]*>\s*<a href="[^"#]*#(?P<arc>[a-z0-9-]+)"[^>]*>\s*'
+    r'(?:<strong[^>]*>(?P<tag>[^<]*)</strong>)?\s*(?P<title>[^<]*)'   # tag: "Special:"
+    r'|<h3[^>]*>\s*<a href="[^"#]*#(?P<ep>[a-z0-9-]+)"'
+    r'|<span[^>]*>(?P<track>English [^<]+)</span>'
     r'|pixeldrain\.net/l/(?P<list>[A-Za-z0-9]+)'
-    r'|>[\s ]*(?P<q>480p|720p|1080p)[\s ]*<'
+    r'|>\s*(?P<q>480p|720p|1080p)\s*<'
 )
 
 
 def parse_watch(html):
-    # also grab the human title that follows each anchor:  watch#slug"> Title</a>
-    titles = {
-        slugify(m.group(1)): m.group(2).strip()
-        for m in re.finditer(r'href="[^"]*#([a-z0-9-]+)"[^>]*>\s*([^<]+?)\s*</a>', html)
-    }
     arcs = {}
     cur_arc = cur_track = pending_list = None
     for m in TOKEN_RE.finditer(html):
         if m.group("arc"):
             cur_arc = m.group("arc")
             cur_track = pending_list = None
-            arcs.setdefault(cur_arc, {"title": titles.get(cur_arc, cur_arc),
-                                      "sub": {}, "dub": {}})
-        elif m.group("sub"):
-            cur_track = "sub"
-        elif m.group("dub"):
-            cur_track = "dub"
+            title = html_unescape(f'{m.group("tag") or ""} {m.group("title")}').strip()
+            title = title or cur_arc
+            arcs.setdefault(cur_arc, {"title": title, "sub": {}, "dub": {}, "cc": {}})
+        elif m.group("ep"):
+            cur_track = pending_list = None     # per-episode links, not arc lists
+        elif m.group("track"):
+            cur_track = TRACKS.get(m.group("track").strip())
+            pending_list = None
         elif m.group("list"):
             pending_list = m.group("list")  # link precedes its quality label
         elif m.group("q") and cur_arc and cur_track and pending_list:
@@ -435,6 +442,8 @@ def main():
     ap.add_argument("-q", "--quality", default="1080p", choices=["480p", "720p", "1080p"])
     ap.add_argument("--dub", action="store_true", help="English dub instead of sub. "
                     "falls back to the Muhn Pace dub on arcs One Pace has not dubbed")
+    ap.add_argument("--cc", action="store_true", help="English dub with closed captions "
+                    "(only on arcs where One Pace offers it)")
     muhn = ap.add_mutually_exclusive_group()
     muhn.add_argument("--muhn", action="store_true", help="force the Muhn Pace dub even "
                       "where an official One Pace dub exists")
@@ -466,7 +475,8 @@ def main():
             q = sorted(set(arcs[slug]["sub"]) | set(arcs[slug]["dub"]))
             dub = "dub" if arcs[slug]["dub"] else (
                 "dub:muhn" if muhn_available(slug, args) else "sub-only")
-            print(f"{slug:28} {arcs[slug]['title']:30} [{','.join(q)}] {dub}")
+            cc = "+cc" if arcs[slug]["cc"] else ""
+            print(f"{slug:28} {arcs[slug]['title']:30} [{','.join(q)}] {dub}{cc}")
         return
 
     if args.arc:
@@ -474,6 +484,8 @@ def main():
         slug = match_arc(arcs, args.arc)
         if args.muhn:
             track = "muhn"
+        elif args.cc:
+            track = "cc"
         elif args.dub and not arcs[slug]["dub"] and muhn_available(slug, args):
             track = "muhn"          # no official dub here, fall back to Muhn Pace
             sys.stderr.write(f"no official One Pace dub for {slug}, "
@@ -496,6 +508,8 @@ def main():
             opts.append(("English Dub", "dub"))
         elif muhn_available(slug, args):
             opts.append(("English Dub (Muhn Pace - unofficial dub edit)", "muhn"))
+        if arcs[slug]["cc"]:
+            opts.append(("English Dub with Closed Captions", "cc"))
         track = opts[menu_pick(opts, 0, "\ntrack:")][1] if len(opts) > 1 else opts[0][1]
 
         if track == "muhn":

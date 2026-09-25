@@ -74,6 +74,7 @@ onepace --version
 | -------------------- | -------------------------------------------------- |
 | `-q`, `--quality`    | `480p`, `720p`, or `1080p` (default `1080p`)       |
 | `--dub`              | English dub instead of sub (falls back to Muhn Pace where One Pace has no dub) |
+| `--cc`               | English dub with closed captions (only where One Pace offers it) |
 | `--muhn`             | force the Muhn Pace dub even where an official dub exists |
 | `--no-muhn`          | One Pace only: never fall back to the Muhn Pace dub |
 | `--refresh-muhn`     | re-scrape the Muhn Pace guide, print an updated table |

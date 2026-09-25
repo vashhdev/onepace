@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- **Arc list broken by the new watch page.** onepace.net now lists every episode inline
+  under its arc, with per-episode links and svg icon references. The old scraper took
+  every `#fragment` on the page (episode anchors, `#watch-icon-*` icons) for an arc, and
+  the icon between each pixeldrain link and its quality label reset the parser, so no
+  arc resolved to any list. Arcs are now read from their `<h2>` heading only, episode
+  sections are skipped, and "Special:" titles are kept.
+
+### Added
+
+- **`--cc`** plays the new "English Dub with Closed Captions" track, and it shows up in
+  the interactive track menu and as `+cc` in `--list` on arcs that have it. Previously
+  it would have silently overwritten the regular dub.
+
 ## [1.1.0] - 2026-07-28
 
 ### Added
